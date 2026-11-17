@@ -1,0 +1,32 @@
+{
+  "id": "github",
+  "version": "0.1.0",
+  "api": 1,
+  "squadron": ">=0.49.0",
+  "name": { "en": "GitHub", "fr": "GitHub" },
+  "description": {
+    "en": "Pull requests and GitHub Actions runs of your GitHub projects in Squadron: review, comment, merge",
+    "fr": "Les pull requests et les runs GitHub Actions de vos projets GitHub dans Squadron : relire, commenter, fusionner"
+  },
+  "logo": "logo.svg",
+  "wasm": "target/wasm32-wasip2/release/github.wasm",
+  "permissions": { "network": ["api.github.com"] },
+  "contributes": {
+    "accounts": {
+      "label": { "en": "GitHub account", "fr": "Compte GitHub" },
+      "check": true,
+      "fields": [
+        {
+          "id": "token",
+          "label": { "en": "Personal access token", "fr": "Jeton d’accès personnel" },
+          "kind": "secret",
+          "hint": {
+            "en": "Create a token with the repo, read:org and workflow scopes",
+            "fr": "Créer un jeton avec les portées repo, read:org et workflow"
+          },
+          "url": "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow&description=Squadron"
+        }
+      ]
+    }
+  }
+}
