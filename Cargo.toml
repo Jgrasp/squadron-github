@@ -15,6 +15,3 @@ serde_json = "1"
 opt-level = "s"
 lto = true
 strip = true
-
-[patch."https://github.com/Jgrasp/squadron-extensions"]
-squadron_extension_api = { path = "../squadron-extensions/api" }
