@@ -6,4 +6,4 @@
 - Reviews with line comments, a summary and a verdict, replies to remarks, resolved threads shown and resolved from Squadron, merges with the repository's default method, and title and description changes
 - GitHub Actions runs of each project, with a notification when one ends
 - Chips for GitHub pull request links in conversations
-- A personal access token, checked before it is saved
+- One GitHub account per owner, with a fine-grained token checked before it is saved; without one, the GitHub CLI is used
