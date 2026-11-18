@@ -156,11 +156,21 @@ pub fn failure(status: u16, body: &Value, raw: &str) -> String {
     }
 }
 
+fn parsed(path: &str, out: &str) -> Value {
+    serde_json::from_str(out).unwrap_or_else(|e| {
+        host::log(&format!(
+            "GitHub CLI: the answer to {path} is not JSON ({} bytes): {e}",
+            out.len()
+        ));
+        Value::Null
+    })
+}
+
 pub fn rest(via: &Via, path: &str) -> Result<Value, String> {
     match via {
         Via::Account(account) => answer(get(account, path)?),
         Via::Gh => match gh(&["api", endpoint(path)], None)? {
-            (true, out, _) => Ok(serde_json::from_str(&out).unwrap_or(Value::Null)),
+            (true, out, _) => Ok(parsed(path, &out)),
             (false, out, err) => Err(gh_failure(&err, &out)),
         },
     }
@@ -170,7 +180,7 @@ pub fn rest_jq(via: &Via, path: &str, jq: &str) -> Result<Value, String> {
     match via {
         Via::Account(_) => rest(via, path),
         Via::Gh => match gh(&["api", endpoint(path), "--jq", jq], None)? {
-            (true, out, _) => Ok(serde_json::from_str(&out).unwrap_or(Value::Null)),
+            (true, out, _) => Ok(parsed(path, &out)),
             (false, out, err) => Err(gh_failure(&err, &out)),
         },
     }
@@ -227,10 +237,21 @@ pub fn every(via: &Via, path: &str) -> Result<Vec<Value>, String> {
         Via::Account(account) => account,
         Via::Gh => {
             return match gh(&["api", endpoint(&url), "--paginate", "--jq", ".[]"], None)? {
-                (true, out, _) => Ok(out
-                    .lines()
-                    .filter_map(|line| serde_json::from_str(line).ok())
-                    .collect()),
+                (true, out, _) => {
+                    let lines: Vec<&str> = out.lines().filter(|l| !l.trim().is_empty()).collect();
+                    let found: Vec<Value> = lines
+                        .iter()
+                        .filter_map(|line| serde_json::from_str(line).ok())
+                        .collect();
+                    if found.len() < lines.len() {
+                        host::log(&format!(
+                            "GitHub CLI: {} of {} items of {path} are not JSON",
+                            lines.len() - found.len(),
+                            lines.len()
+                        ));
+                    }
+                    Ok(found)
+                }
                 (false, out, err) => Err(gh_failure(&err, &out)),
             };
         }
