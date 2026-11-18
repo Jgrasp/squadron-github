@@ -127,13 +127,18 @@ pub fn graphql(account: &str, query: &str, variables: Value) -> Result<Value, St
 }
 
 pub fn graphql_data(mut found: Value) -> Result<Value, String> {
+    let data = &found["data"];
     let errors: Vec<&str> = found["errors"]
         .as_array()
         .into_iter()
         .flatten()
+        .filter(|e| match e["path"].get(0).and_then(Value::as_str) {
+            Some(top) => data[top].is_null(),
+            None => true,
+        })
         .filter_map(|e| e["message"].as_str())
         .collect();
-    if !errors.is_empty() && found["data"].is_null() {
+    if !errors.is_empty() || data.is_null() {
         return Err(format!("GitHub answered: {}", errors.join("; ")));
     }
     Ok(found["data"].take())
@@ -183,6 +188,16 @@ mod tests {
             )
             .unwrap_err(),
             "GitHub answered: Could not resolve to a Repository"
+        );
+        let hidden: Value = serde_json::from_str(r#"{"data":{"viewer":{"login":"Jgrasp"},"repository":null},"errors":[{"type":"NOT_FOUND","path":["repository"],"locations":[{"line":3,"column":3}],"message":"Could not resolve to a Repository with the name 'Jgrasp/does-not-exist'."}]}"#).unwrap();
+        assert_eq!(
+            graphql_data(hidden).unwrap_err(),
+            "GitHub answered: Could not resolve to a Repository with the name 'Jgrasp/does-not-exist'."
+        );
+        let partial = json!({"data": {"repository": {"pullRequest": {"number": 3}}}, "errors": [{"path": ["repository", "pullRequest", "reviewRequests"], "message": "Resource not accessible"}]});
+        assert_eq!(
+            graphql_data(partial).unwrap()["repository"]["pullRequest"]["number"],
+            3
         );
     }
 }
