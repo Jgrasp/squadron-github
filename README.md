@@ -28,3 +28,5 @@ rustup target add wasm32-wasip2
 cargo build --release --target wasm32-wasip2
 cargo test
 ```
+
+CI checks the formatting of every push and pull request with `cargo fmt --check`.
