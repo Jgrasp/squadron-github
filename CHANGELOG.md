@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 · 2026-11-18
+
+- GitHub Actions runs show again for projects that go through the GitHub CLI
+
 ## 0.1.0 · 2026-11-18
 
 - Pull requests of your GitHub projects in Squadron: the pull request of each agent's branch, the ones to review, yours and the others, with their checks, reviewers and conflicts

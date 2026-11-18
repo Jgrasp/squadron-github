@@ -1,5 +1,9 @@
 # Journal des modifications
 
+## 0.1.1 · 2026-11-18
+
+- Les runs GitHub Actions s’affichent de nouveau pour les projets qui passent par la GitHub CLI
+
 ## 0.1.0 · 2026-11-18
 
 - Les pull requests de vos projets GitHub dans Squadron : celle de la branche de chaque agent, celles à relire, les vôtres et les autres, avec leurs checks, leurs relecteurs et leurs conflits

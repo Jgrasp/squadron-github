@@ -166,6 +166,16 @@ pub fn rest(via: &Via, path: &str) -> Result<Value, String> {
     }
 }
 
+pub fn rest_jq(via: &Via, path: &str, jq: &str) -> Result<Value, String> {
+    match via {
+        Via::Account(_) => rest(via, path),
+        Via::Gh => match gh(&["api", endpoint(path), "--jq", jq], None)? {
+            (true, out, _) => Ok(serde_json::from_str(&out).unwrap_or(Value::Null)),
+            (false, out, err) => Err(gh_failure(&err, &out)),
+        },
+    }
+}
+
 pub fn send(via: &Via, method: &str, path: &str, body: &Value) -> Result<Value, String> {
     match via {
         Via::Account(account) => answer(host::fetch(&request(
