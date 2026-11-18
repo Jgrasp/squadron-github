@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use squadron_extension_api::forge::{
     self, BranchArgs, Input, NoArgs, NumberArgs, PostArgs, ReplyArgs, ResolveArgs, UpdateArgs,
 };
-use squadron_extension_api::{Account, Extension, squadron_extension};
+use squadron_extension_api::{Account, Extension, host, squadron_extension};
 
 mod api;
 mod pulls;
@@ -13,9 +13,37 @@ use reads::Repo;
 
 struct GitHub;
 
-fn repo<A: Default + serde::de::DeserializeOwned>(input: &str) -> Result<(Repo, A), String> {
+fn on_repo<A, T>(
+    input: &str,
+    work: impl Fn(&Repo, &A) -> Result<T, String>,
+) -> Result<String, String>
+where
+    A: Default + serde::de::DeserializeOwned,
+    T: serde::Serialize,
+{
     let asked: Input<A> = forge::input(input)?;
-    Ok((Repo::new(&asked.repo, &asked.groups)?, asked.args))
+    let (owner, name) = reads::owner_and_name(&asked.repo, &asked.groups)?;
+    let key = format!("owner:{}", owner.to_lowercase());
+    let known = host::state_get(&key);
+    let mut last = String::new();
+    for account in api::ordered(api::accounts()?, known.clone()) {
+        let repo = Repo {
+            account: account.clone(),
+            owner: owner.clone(),
+            name: name.clone(),
+        };
+        match work(&repo, &asked.args) {
+            Ok(found) => {
+                if known.as_deref() != Some(account.as_str()) {
+                    host::state_set(&key, Some(&account));
+                }
+                return forge::answer(&found);
+            }
+            Err(error) if api::denied(&error) => last = error,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last)
 }
 
 impl Extension for GitHub {
@@ -42,51 +70,27 @@ impl Extension for GitHub {
 
     fn forge(call: String, input: String) -> Result<String, String> {
         match call.as_str() {
-            "pull" => {
-                let (repo, args) = repo::<BranchArgs>(&input)?;
-                forge::answer(&reads::pull(&repo, &args.branch)?)
-            }
-            "numbered" => {
-                let (repo, args) = repo::<NumberArgs>(&input)?;
-                forge::answer(&reads::numbered(&repo, args.number)?)
-            }
-            "lists" => {
-                let (repo, _) = repo::<NoArgs>(&input)?;
-                forge::answer(&reads::lists(&repo)?)
-            }
-            "remarks" => {
-                let (repo, args) = repo::<NumberArgs>(&input)?;
-                forge::answer(&reads::remarks(&repo, args.number)?)
-            }
-            "me" => forge::answer(&reads::me(&api::account()?)?),
-            "runs" => {
-                let (repo, _) = repo::<NoArgs>(&input)?;
-                forge::answer(&reads::runs(&repo)?)
-            }
-            "reply" => {
-                let (repo, args) = repo::<ReplyArgs>(&input)?;
-                writes::reply(&repo, &args)?;
-                forge::answer(&Value::Null)
-            }
-            "resolve" => {
-                let (repo, args) = repo::<ResolveArgs>(&input)?;
-                writes::resolve(&repo, &args)?;
-                forge::answer(&Value::Null)
-            }
-            "post" => {
-                let (repo, args) = repo::<PostArgs>(&input)?;
-                forge::answer(&writes::post(&repo, &args))
-            }
-            "merge" => {
-                let (repo, args) = repo::<NumberArgs>(&input)?;
-                writes::merge(&repo, args.number)?;
-                forge::answer(&Value::Null)
-            }
-            "update" => {
-                let (repo, args) = repo::<UpdateArgs>(&input)?;
-                writes::update(&repo, &args)?;
-                forge::answer(&Value::Null)
-            }
+            "pull" => on_repo(&input, |repo, args: &BranchArgs| {
+                reads::pull(repo, &args.branch)
+            }),
+            "numbered" => on_repo(&input, |repo, args: &NumberArgs| {
+                reads::numbered(repo, args.number)
+            }),
+            "lists" => on_repo(&input, |repo, _: &NoArgs| reads::lists(repo)),
+            "remarks" => on_repo(&input, |repo, args: &NumberArgs| {
+                reads::remarks(repo, args.number)
+            }),
+            "me" => on_repo(&input, |repo, _: &NoArgs| reads::me(repo)),
+            "runs" => on_repo(&input, |repo, _: &NoArgs| reads::runs(repo)),
+            "reply" => on_repo(&input, |repo, args: &ReplyArgs| writes::reply(repo, args)),
+            "resolve" => on_repo(&input, |repo, args: &ResolveArgs| {
+                writes::resolve(repo, args)
+            }),
+            "post" => on_repo(&input, |repo, args: &PostArgs| writes::post(repo, args)),
+            "merge" => on_repo(&input, |repo, args: &NumberArgs| {
+                writes::merge(repo, args.number)
+            }),
+            "update" => on_repo(&input, |repo, args: &UpdateArgs| writes::update(repo, args)),
             _ => Err(forge::unsupported(&call)),
         }
     }

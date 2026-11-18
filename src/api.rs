@@ -31,17 +31,36 @@ pub fn get(account: &str, path: &str) -> Result<Response, String> {
     host::fetch(&request("GET", path, account, None))
 }
 
-pub fn account() -> Result<String, String> {
-    host::accounts()
-        .into_iter()
-        .next()
-        .map(|a| a.id)
-        .ok_or_else(|| {
-            forge::no_account(json!({
-                "en": "Add a GitHub account in Settings › Extensions › GitHub.",
-                "fr": "Ajoutez un compte GitHub dans Réglages › Extensions › GitHub.",
-            }))
-        })
+pub fn accounts() -> Result<Vec<String>, String> {
+    let found: Vec<String> = host::accounts().into_iter().map(|a| a.id).collect();
+    if found.is_empty() {
+        return Err(forge::no_account(json!({
+            "en": "Add a GitHub account in Settings › Extensions › GitHub.",
+            "fr": "Ajoutez un compte GitHub dans Réglages › Extensions › GitHub.",
+        })));
+    }
+    Ok(found)
+}
+
+pub fn denied(error: &str) -> bool {
+    [
+        "\"code\":\"account\"",
+        "answered 403",
+        "answered 404",
+        "Could not resolve to a Repository",
+        "forbids access",
+        "Resource not accessible",
+    ]
+    .iter()
+    .any(|mark| error.contains(mark))
+}
+
+pub fn ordered(mut accounts: Vec<String>, known: Option<String>) -> Vec<String> {
+    if let Some(i) = known.and_then(|k| accounts.iter().position(|a| *a == k)) {
+        let first = accounts.remove(i);
+        accounts.insert(0, first);
+    }
+    accounts
 }
 
 pub fn refused() -> String {
@@ -167,6 +186,31 @@ pub fn graphql_data(mut found: Value) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tries_the_account_that_worked_for_the_owner_first() {
+        let all = vec!["a1".to_string(), "a2".to_string(), "a3".to_string()];
+        assert_eq!(ordered(all.clone(), Some("a3".into())), ["a3", "a1", "a2"]);
+        assert_eq!(
+            ordered(all.clone(), Some("gone".into())),
+            ["a1", "a2", "a3"]
+        );
+        assert_eq!(ordered(all, None), ["a1", "a2", "a3"]);
+    }
+
+    #[test]
+    fn tells_a_refused_repository_from_another_failure() {
+        assert!(denied(&refused()));
+        assert!(denied(
+            "GitHub answered 403: `Steel-Shed-Solutions` forbids access via a personal access token (classic)."
+        ));
+        assert!(denied(
+            "GitHub answered: Could not resolve to a Repository with the name 'a/b'."
+        ));
+        assert!(denied("GitHub answered 404: Not Found"));
+        assert!(!denied("GitHub answered 422: Unprocessable Entity"));
+        assert!(!denied("acme/shop has no pull request #3."));
+    }
 
     #[test]
     fn follows_the_next_page_of_a_link_header() {

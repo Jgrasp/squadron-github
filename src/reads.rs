@@ -10,22 +10,20 @@ pub struct Repo {
     pub name: String,
 }
 
-impl Repo {
-    pub fn new(repo: &str, groups: &BTreeMap<String, String>) -> Result<Self, String> {
-        let (owner, name) = match (groups.get("owner"), groups.get("name")) {
-            (Some(owner), Some(name)) => (owner.clone(), name.clone()),
-            _ => repo
-                .split_once('/')
-                .map(|(o, n)| (o.to_string(), n.to_string()))
-                .ok_or_else(|| format!("{repo} is not a GitHub repository."))?,
-        };
-        Ok(Self {
-            account: api::account()?,
-            owner,
-            name,
-        })
+pub fn owner_and_name(
+    repo: &str,
+    groups: &BTreeMap<String, String>,
+) -> Result<(String, String), String> {
+    match (groups.get("owner"), groups.get("name")) {
+        (Some(owner), Some(name)) => Ok((owner.clone(), name.clone())),
+        _ => repo
+            .split_once('/')
+            .map(|(o, n)| (o.to_string(), n.to_string()))
+            .ok_or_else(|| format!("{repo} is not a GitHub repository.")),
     }
+}
 
+impl Repo {
     pub fn slug(&self) -> String {
         format!("{}/{}", self.owner, self.name)
     }
@@ -256,8 +254,8 @@ pub fn remarks(repo: &Repo, number: u64) -> Result<Vec<Remark>, String> {
     Ok(found)
 }
 
-pub fn me(account: &str) -> Result<Person, String> {
-    let user = api::rest(account, "/user")?;
+pub fn me(repo: &Repo) -> Result<Person, String> {
+    let user = api::rest(&repo.account, "/user")?;
     Ok(Person {
         name: user["login"].as_str().unwrap_or_default().into(),
         avatar: user["avatar_url"].as_str().unwrap_or_default().into(),

@@ -66,26 +66,27 @@ pub fn review(args: &PostArgs) -> Option<Value> {
     Some(json!({ "commit_id": args.head, "event": event, "body": body, "comments": comments }))
 }
 
-pub fn post(repo: &Repo, args: &PostArgs) -> Posted {
+pub fn post(repo: &Repo, args: &PostArgs) -> Result<Posted, String> {
     let Some(review) = review(args) else {
-        return Posted {
+        return Ok(Posted {
             done: 0,
             said: true,
             error: None,
-        };
+        });
     };
     let path = format!("/repos/{}/pulls/{}/reviews", repo.slug(), args.number);
     match api::send(&repo.account, "POST", &path, &review) {
-        Ok(_) => Posted {
+        Ok(_) => Ok(Posted {
             done: args.drafts.len(),
             said: true,
             error: None,
-        },
-        Err(error) => Posted {
+        }),
+        Err(error) if api::denied(&error) => Err(error),
+        Err(error) => Ok(Posted {
             done: 0,
             said: false,
             error: Some(api::plain(error)),
-        },
+        }),
     }
 }
 
