@@ -2,11 +2,11 @@
   "id": "github",
   "version": "0.1.0",
   "api": 1,
-  "squadron": ">=0.49.0",
+  "squadron": ">=0.53.0",
   "name": { "en": "GitHub", "fr": "GitHub" },
   "description": {
     "en": "Pull requests and GitHub Actions runs of your GitHub projects in Squadron: review, comment, merge",
-    "fr": "Les pull requests et les runs GitHub Actions de vos projets GitHub dans Squadron : relire, commenter, fusionner"
+    "fr": "Les pull requests et les runs GitHub Actions de vos projets GitHub dans Squadron : relire, commenter, fusionner"
   },
   "logo": "logo.svg",
   "wasm": "target/wasm32-wasip2/release/github.wasm",
@@ -27,6 +27,11 @@
           "url": "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow&description=Squadron"
         }
       ]
+    },
+    "forge": {
+      "remotes": ["^github\\.com/(?<owner>[A-Za-z0-9_.-]+)/(?<name>[A-Za-z0-9_.-]+)$"],
+      "links": ["https?://(?:www\\.)?github\\.com/(?<owner>[A-Za-z0-9_.-]+)/(?<name>[A-Za-z0-9_.-]+)/pull/(?<number>[0-9]+)"],
+      "calls": ["pull", "numbered", "lists", "remarks", "me", "runs"]
     }
   }
 }

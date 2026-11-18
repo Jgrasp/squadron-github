@@ -182,9 +182,10 @@ dependencies = [
 
 [[package]]
 name = "squadron_extension_api"
-version = "1.6.0"
-source = "git+https://github.com/Jgrasp/squadron-extensions#04551e3e8446140d1047bf599e9ba1b776f78bb8"
+version = "1.8.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "wit-bindgen",
 ]
 
