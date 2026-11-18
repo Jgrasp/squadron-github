@@ -1,10 +1,13 @@
 use serde_json::{Value, json};
-use squadron_extension_api::forge::{self, BranchArgs, Input, NoArgs, NumberArgs};
+use squadron_extension_api::forge::{
+    self, BranchArgs, Input, NoArgs, NumberArgs, PostArgs, ReplyArgs, UpdateArgs,
+};
 use squadron_extension_api::{Account, Extension, squadron_extension};
 
 mod api;
 mod pulls;
 mod reads;
+mod writes;
 
 use reads::Repo;
 
@@ -59,6 +62,25 @@ impl Extension for GitHub {
             "runs" => {
                 let (repo, _) = repo::<NoArgs>(&input)?;
                 forge::answer(&reads::runs(&repo)?)
+            }
+            "reply" => {
+                let (repo, args) = repo::<ReplyArgs>(&input)?;
+                writes::reply(&repo, &args)?;
+                forge::answer(&Value::Null)
+            }
+            "post" => {
+                let (repo, args) = repo::<PostArgs>(&input)?;
+                forge::answer(&writes::post(&repo, &args))
+            }
+            "merge" => {
+                let (repo, args) = repo::<NumberArgs>(&input)?;
+                writes::merge(&repo, args.number)?;
+                forge::answer(&Value::Null)
+            }
+            "update" => {
+                let (repo, args) = repo::<UpdateArgs>(&input)?;
+                writes::update(&repo, &args)?;
+                forge::answer(&Value::Null)
             }
             _ => Err(forge::unsupported(&call)),
         }

@@ -84,6 +84,26 @@ pub fn rest(account: &str, path: &str) -> Result<Value, String> {
     answer(get(account, path)?)
 }
 
+pub fn send(account: &str, method: &str, path: &str, body: &Value) -> Result<Value, String> {
+    answer(host::fetch(&request(
+        method,
+        path,
+        account,
+        Some(body.to_string()),
+    ))?)
+}
+
+pub fn plain(error: String) -> String {
+    match serde_json::from_str::<Value>(&error) {
+        Ok(found) => found["title"]["en"]
+            .as_str()
+            .or(found["title"].as_str())
+            .map(str::to_string)
+            .unwrap_or(error),
+        Err(_) => error,
+    }
+}
+
 pub fn next_page(headers: &[(String, String)]) -> Option<String> {
     let link = headers
         .iter()
