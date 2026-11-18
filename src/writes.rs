@@ -1,7 +1,7 @@
 use crate::api;
 use crate::reads::Repo;
 use serde_json::{Map, Value, json};
-use squadron_extension_api::forge::{Draft, PostArgs, Posted, ReplyArgs, UpdateArgs};
+use squadron_extension_api::forge::{Draft, PostArgs, Posted, ReplyArgs, ResolveArgs, UpdateArgs};
 
 pub fn reply(repo: &Repo, args: &ReplyArgs) -> Result<(), String> {
     let path = if args.kind == "line" {
@@ -15,6 +15,27 @@ pub fn reply(repo: &Repo, args: &ReplyArgs) -> Result<(), String> {
         format!("/repos/{}/issues/{}/comments", repo.slug(), args.number)
     };
     api::send(&repo.account, "POST", &path, &json!({ "body": args.body })).map(|_| ())
+}
+
+pub fn resolve(repo: &Repo, args: &ResolveArgs) -> Result<(), String> {
+    if args.kind != "line" {
+        return Err("GitHub only resolves threads on a line.".into());
+    }
+    let thread = crate::reads::threads(repo, args.number)?
+        .into_iter()
+        .find(|t| t.first == args.to)
+        .ok_or_else(|| {
+            format!(
+                "GitHub has no thread starting with the comment {}.",
+                args.to
+            )
+        })?;
+    let mutation = if args.resolved {
+        "mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }"
+    } else {
+        "mutation($id: ID!) { unresolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }"
+    };
+    api::graphql(&repo.account, mutation, json!({ "id": thread.id })).map(|_| ())
 }
 
 pub fn review(args: &PostArgs) -> Option<Value> {

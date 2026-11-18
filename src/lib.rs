@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 use squadron_extension_api::forge::{
-    self, BranchArgs, Input, NoArgs, NumberArgs, PostArgs, ReplyArgs, UpdateArgs,
+    self, BranchArgs, Input, NoArgs, NumberArgs, PostArgs, ReplyArgs, ResolveArgs, UpdateArgs,
 };
 use squadron_extension_api::{Account, Extension, squadron_extension};
 
@@ -66,6 +66,11 @@ impl Extension for GitHub {
             "reply" => {
                 let (repo, args) = repo::<ReplyArgs>(&input)?;
                 writes::reply(&repo, &args)?;
+                forge::answer(&Value::Null)
+            }
+            "resolve" => {
+                let (repo, args) = repo::<ResolveArgs>(&input)?;
+                writes::resolve(&repo, &args)?;
                 forge::answer(&Value::Null)
             }
             "post" => {

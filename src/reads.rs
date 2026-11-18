@@ -180,7 +180,53 @@ pub fn remark_of(found: &Value, kind: &str) -> Remark {
         reply_to: found["in_reply_to_id"].as_u64().map(|n| n.to_string()),
         at: at.as_str().unwrap_or_default().into(),
         kind: if kind == "pulls" { "line" } else { "general" }.into(),
+        resolved: None,
+        commit: found["original_commit_id"].as_str().map(str::to_string),
     }
+}
+
+const THREADS: &str = "query($owner: String!, $name: String!, $number: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id isResolved comments(first: 1) { nodes { databaseId } } } } } } }";
+
+pub struct Thread {
+    pub id: String,
+    pub first: String,
+    pub resolved: bool,
+}
+
+pub fn threads_of(page: &Value) -> Vec<Thread> {
+    page["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|t| {
+            Some(Thread {
+                id: t["id"].as_str()?.to_string(),
+                first: t["comments"]["nodes"][0]["databaseId"]
+                    .as_u64()?
+                    .to_string(),
+                resolved: t["isResolved"] == true,
+            })
+        })
+        .collect()
+}
+
+pub fn threads(repo: &Repo, number: u64) -> Result<Vec<Thread>, String> {
+    let mut found = Vec::new();
+    let mut after = Value::Null;
+    for _ in 0..10 {
+        let data = api::graphql(
+            &repo.account,
+            THREADS,
+            json!({ "owner": repo.owner, "name": repo.name, "number": number, "after": after }),
+        )?;
+        let page = &data["repository"]["pullRequest"]["reviewThreads"];
+        found.extend(threads_of(page));
+        if page["pageInfo"]["hasNextPage"] != true {
+            break;
+        }
+        after = page["pageInfo"]["endCursor"].clone();
+    }
+    Ok(found)
 }
 
 pub fn remarks(repo: &Repo, number: u64) -> Result<Vec<Remark>, String> {
@@ -197,6 +243,14 @@ pub fn remarks(repo: &Repo, number: u64) -> Result<Vec<Remark>, String> {
                 .filter(|r| kind != "reviews" || r["body"].as_str().is_some_and(|b| !b.is_empty()))
                 .map(|r| remark_of(r, kind)),
         );
+    }
+    if let Ok(threads) = threads(repo, number) {
+        for remark in found.iter_mut().filter(|r| r.kind == "line") {
+            remark.resolved = threads
+                .iter()
+                .find(|t| t.first == remark.id)
+                .map(|t| t.resolved);
+        }
     }
     found.sort_by(|a, b| a.at.cmp(&b.at));
     Ok(found)
@@ -291,6 +345,7 @@ mod tests {
             (d.line, d.removed, d.reply_to.as_deref()),
             (None, false, Some("1"))
         );
+        assert_eq!(c.commit, None);
         let review = json!({ "id": 9, "body": "Looks good", "user": { "login": "ann" }, "submitted_at": "t3", "commit_id": "abc" });
         let r = remark_of(&review, "reviews");
         assert_eq!(
@@ -340,5 +395,27 @@ mod tests {
     fn drops_search_results_that_are_not_pull_requests() {
         let found = nodes(&json!({ "nodes": [{ "number": 1 }, {}, null] }));
         assert_eq!(found, [json!({ "number": 1 })]);
+    }
+
+    #[test]
+    fn reads_which_threads_are_resolved() {
+        let page = json!({ "nodes": [
+            { "id": "PRRT_a", "isResolved": true, "comments": { "nodes": [{ "databaseId": 1 }] } },
+            { "id": "PRRT_b", "isResolved": false, "comments": { "nodes": [{ "databaseId": 4 }] } },
+            { "id": "PRRT_c", "isResolved": false, "comments": { "nodes": [] } }
+        ] });
+        let found: Vec<_> = threads_of(&page)
+            .into_iter()
+            .map(|t| (t.id, t.first, t.resolved))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("PRRT_a".to_string(), "1".to_string(), true),
+                ("PRRT_b".to_string(), "4".to_string(), false)
+            ]
+        );
+        let line = json!({ "id": 1, "body": "Nit", "user": { "login": "octo" }, "path": "a.ts", "line": 5, "original_commit_id": "a1b2c3d", "created_at": "t1" });
+        assert_eq!(remark_of(&line, "pulls").commit.as_deref(), Some("a1b2c3d"));
     }
 }

@@ -3,7 +3,7 @@
 ## 0.1.0 · 2026-11-18
 
 - Les pull requests de vos projets GitHub dans Squadron : celle de la branche de chaque agent, celles à relire, les vôtres et les autres, avec leurs checks, leurs relecteurs et leurs conflits
-- Des revues avec commentaires de ligne, résumé et verdict, des réponses aux remarques, des fusions avec la méthode par défaut du dépôt, et le changement du titre et de la description
+- Des revues avec commentaires de ligne, résumé et verdict, des réponses aux remarques, des fils résolus affichés et résolus depuis Squadron, des fusions avec la méthode par défaut du dépôt, et le changement du titre et de la description
 - Les runs GitHub Actions de chaque projet, avec une notification à la fin de chacun
 - Des puces pour les liens de pull requests GitHub dans les conversations
 - Un jeton d’accès personnel, vérifié avant d’être enregistré
