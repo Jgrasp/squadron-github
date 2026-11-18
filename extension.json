@@ -10,7 +10,7 @@
   },
   "logo": "logo.svg",
   "wasm": "target/wasm32-wasip2/release/github.wasm",
-  "permissions": { "network": ["api.github.com"] },
+  "permissions": { "network": ["api.github.com"], "exec": ["gh"] },
   "contributes": {
     "accounts": {
       "label": { "en": "GitHub account", "fr": "Compte GitHub" },
@@ -25,6 +25,20 @@
             "fr": "Créer un jeton à grain fin pour le propriétaire de vos dépôts, un compte par propriétaire"
           },
           "url": "https://github.com/settings/personal-access-tokens/new"
+        }
+      ]
+    },
+    "settings": {
+      "options": [
+        {
+          "id": "gh",
+          "label": { "en": "Use the GitHub CLI", "fr": "Utiliser la CLI GitHub" },
+          "hint": {
+            "en": "When no account reaches a repository, the requests go through gh, signed in with gh auth login",
+            "fr": "Quand aucun compte n’atteint un dépôt, les requêtes passent par gh, connecté avec gh auth login"
+          },
+          "kind": "toggle",
+          "default": true
         }
       ]
     },

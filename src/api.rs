@@ -4,6 +4,74 @@ use squadron_extension_api::{Request, Response, host};
 
 const API: &str = "https://api.github.com";
 const PAGES: usize = 10;
+pub const GH: &str = "gh";
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Via {
+    Account(String),
+    Gh,
+}
+
+impl Via {
+    pub fn key(&self) -> &str {
+        match self {
+            Via::Account(id) => id,
+            Via::Gh => GH,
+        }
+    }
+}
+
+pub fn ways() -> Result<Vec<Via>, String> {
+    let mut found: Vec<Via> = host::accounts()
+        .into_iter()
+        .map(|a| Via::Account(a.id))
+        .collect();
+    let options: Value = serde_json::from_str(&host::options()).unwrap_or_default();
+    if options["gh"] != false {
+        found.push(Via::Gh);
+    }
+    if found.is_empty() {
+        return Err(no_way());
+    }
+    Ok(found)
+}
+
+fn no_way() -> String {
+    forge::no_account(json!({
+        "en": "Add a GitHub account in Settings › Extensions › GitHub, or sign in to the GitHub CLI with gh auth login.",
+        "fr": "Ajoutez un compte GitHub dans Réglages › Extensions › GitHub, ou connectez la CLI GitHub avec gh auth login.",
+    }))
+}
+
+fn gh(args: &[&str], input: Option<String>) -> Result<(bool, String, String), String> {
+    let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+    let out = match input {
+        Some(input) => host::exec_input(GH, &args, None, &input),
+        None => host::exec(GH, &args, None),
+    }
+    .map_err(|_| no_way())?;
+    Ok((out.code == 0, out.stdout, out.stderr))
+}
+
+pub fn gh_failure(stderr: &str, stdout: &str) -> String {
+    let status = stderr
+        .rsplit_once("(HTTP ")
+        .and_then(|(_, rest)| rest.split(')').next())
+        .and_then(|code| code.parse::<u16>().ok());
+    match status {
+        Some(401) => no_way(),
+        Some(status) => {
+            let body: Value = serde_json::from_str(stdout).unwrap_or(Value::Null);
+            failure(status, &body, stderr.trim())
+        }
+        None if stderr.contains("gh auth login") => no_way(),
+        None => format!("GitHub CLI: {}", stderr.trim()),
+    }
+}
+
+fn endpoint(path: &str) -> &str {
+    path.trim_start_matches('/')
+}
 
 fn request(method: &str, url: &str, account: &str, body: Option<String>) -> Request {
     let url = if url.starts_with("https://") {
@@ -31,17 +99,6 @@ pub fn get(account: &str, path: &str) -> Result<Response, String> {
     host::fetch(&request("GET", path, account, None))
 }
 
-pub fn accounts() -> Result<Vec<String>, String> {
-    let found: Vec<String> = host::accounts().into_iter().map(|a| a.id).collect();
-    if found.is_empty() {
-        return Err(forge::no_account(json!({
-            "en": "Add a GitHub account in Settings › Extensions › GitHub.",
-            "fr": "Ajoutez un compte GitHub dans Réglages › Extensions › GitHub.",
-        })));
-    }
-    Ok(found)
-}
-
 pub fn denied(error: &str) -> bool {
     [
         "\"code\":\"account\"",
@@ -55,8 +112,8 @@ pub fn denied(error: &str) -> bool {
     .any(|mark| error.contains(mark))
 }
 
-pub fn ordered(mut accounts: Vec<String>, known: Option<String>) -> Vec<String> {
-    if let Some(i) = known.and_then(|k| accounts.iter().position(|a| *a == k)) {
+pub fn ordered(mut accounts: Vec<Via>, known: Option<String>) -> Vec<Via> {
+    if let Some(i) = known.and_then(|k| accounts.iter().position(|a| a.key() == k)) {
         let first = accounts.remove(i);
         accounts.insert(0, first);
     }
@@ -99,17 +156,32 @@ pub fn failure(status: u16, body: &Value, raw: &str) -> String {
     }
 }
 
-pub fn rest(account: &str, path: &str) -> Result<Value, String> {
-    answer(get(account, path)?)
+pub fn rest(via: &Via, path: &str) -> Result<Value, String> {
+    match via {
+        Via::Account(account) => answer(get(account, path)?),
+        Via::Gh => match gh(&["api", endpoint(path)], None)? {
+            (true, out, _) => Ok(serde_json::from_str(&out).unwrap_or(Value::Null)),
+            (false, out, err) => Err(gh_failure(&err, &out)),
+        },
+    }
 }
 
-pub fn send(account: &str, method: &str, path: &str, body: &Value) -> Result<Value, String> {
-    answer(host::fetch(&request(
-        method,
-        path,
-        account,
-        Some(body.to_string()),
-    ))?)
+pub fn send(via: &Via, method: &str, path: &str, body: &Value) -> Result<Value, String> {
+    match via {
+        Via::Account(account) => answer(host::fetch(&request(
+            method,
+            path,
+            account,
+            Some(body.to_string()),
+        ))?),
+        Via::Gh => match gh(
+            &["api", "-X", method, endpoint(path), "--input", "-"],
+            Some(body.to_string()),
+        )? {
+            (true, out, _) => Ok(serde_json::from_str(&out).unwrap_or(Value::Null)),
+            (false, out, err) => Err(gh_failure(&err, &out)),
+        },
+    }
 }
 
 pub fn plain(error: String) -> String {
@@ -138,9 +210,21 @@ pub fn next_page(headers: &[(String, String)]) -> Option<String> {
     })
 }
 
-pub fn every(account: &str, path: &str) -> Result<Vec<Value>, String> {
+pub fn every(via: &Via, path: &str) -> Result<Vec<Value>, String> {
     let sep = if path.contains('?') { '&' } else { '?' };
     let mut url = format!("{path}{sep}per_page=100");
+    let account = match via {
+        Via::Account(account) => account,
+        Via::Gh => {
+            return match gh(&["api", endpoint(&url), "--paginate", "--jq", ".[]"], None)? {
+                (true, out, _) => Ok(out
+                    .lines()
+                    .filter_map(|line| serde_json::from_str(line).ok())
+                    .collect()),
+                (false, out, err) => Err(gh_failure(&err, &out)),
+            };
+        }
+    };
     let mut found = Vec::new();
     for _ in 0..PAGES {
         let response = get(account, &url)?;
@@ -154,14 +238,20 @@ pub fn every(account: &str, path: &str) -> Result<Vec<Value>, String> {
     Ok(found)
 }
 
-pub fn graphql(account: &str, query: &str, variables: Value) -> Result<Value, String> {
+pub fn graphql(via: &Via, query: &str, variables: Value) -> Result<Value, String> {
     let body = json!({ "query": query, "variables": variables }).to_string();
-    let found = answer(host::fetch(&request(
-        "POST",
-        "/graphql",
-        account,
-        Some(body),
-    ))?)?;
+    let found = match via {
+        Via::Account(account) => answer(host::fetch(&request(
+            "POST",
+            "/graphql",
+            account,
+            Some(body),
+        ))?)?,
+        Via::Gh => {
+            let (_, out, err) = gh(&["api", "graphql", "--input", "-"], Some(body))?;
+            serde_json::from_str(&out).map_err(|_| gh_failure(&err, &out))?
+        }
+    };
     graphql_data(found)
 }
 
@@ -189,13 +279,43 @@ mod tests {
 
     #[test]
     fn tries_the_account_that_worked_for_the_owner_first() {
-        let all = vec!["a1".to_string(), "a2".to_string(), "a3".to_string()];
-        assert_eq!(ordered(all.clone(), Some("a3".into())), ["a3", "a1", "a2"]);
+        let a = |id: &str| Via::Account(id.into());
+        let all = vec![a("a1"), a("a2"), Via::Gh];
         assert_eq!(
-            ordered(all.clone(), Some("gone".into())),
-            ["a1", "a2", "a3"]
+            ordered(all.clone(), Some("gh".into())),
+            [Via::Gh, a("a1"), a("a2")]
         );
-        assert_eq!(ordered(all, None), ["a1", "a2", "a3"]);
+        assert_eq!(
+            ordered(all.clone(), Some("a2".into())),
+            [a("a2"), a("a1"), Via::Gh]
+        );
+        assert_eq!(ordered(all.clone(), Some("gone".into())), all);
+    }
+
+    #[test]
+    fn reads_why_the_github_cli_failed() {
+        assert_eq!(
+            gh_failure(
+                "gh: Not Found (HTTP 404)\n",
+                r#"{"message":"Not Found","status":"404"}"#
+            ),
+            "GitHub answered 404: Not Found"
+        );
+        let forbidden = gh_failure("gh: Resource not accessible by integration (HTTP 403)", "");
+        assert!(denied(&forbidden), "{forbidden}");
+        for signed_out in [
+            gh_failure("gh: Bad credentials (HTTP 401)", ""),
+            gh_failure(
+                "To get started with GitHub CLI, please run:  gh auth login",
+                "",
+            ),
+        ] {
+            assert!(denied(&signed_out));
+        }
+        assert_eq!(
+            gh_failure("unknown flag: --input", ""),
+            "GitHub CLI: unknown flag: --input"
+        );
     }
 
     #[test]

@@ -5,7 +5,7 @@ use squadron_extension_api::forge::{Lists, Numbered, Person, Pull, Remark, Run};
 use std::collections::BTreeMap;
 
 pub struct Repo {
-    pub account: String,
+    pub via: api::Via,
     pub owner: String,
     pub name: String,
 }
@@ -33,7 +33,7 @@ impl Repo {
             variables["owner"] = json!(self.owner);
             variables["name"] = json!(self.name);
         }
-        api::graphql(&self.account, &format!("{query}\n{FIELDS}"), variables)
+        api::graphql(&self.via, &format!("{query}\n{FIELDS}"), variables)
     }
 
     fn pages(
@@ -151,7 +151,7 @@ pub fn lists(repo: &Repo) -> Result<Lists, String> {
     });
     for pull in lists.review.iter_mut().filter(|p| p.reviewed.is_some()) {
         let path = format!("/repos/{}/pulls/{}/reviews", repo.slug(), pull.number);
-        pull.reviewed_head = api::every(&repo.account, &path)
+        pull.reviewed_head = api::every(&repo.via, &path)
             .ok()
             .and_then(|reviews| pulls::last_review_head(&reviews, me));
     }
@@ -213,7 +213,7 @@ pub fn threads(repo: &Repo, number: u64) -> Result<Vec<Thread>, String> {
     let mut after = Value::Null;
     for _ in 0..10 {
         let data = api::graphql(
-            &repo.account,
+            &repo.via,
             THREADS,
             json!({ "owner": repo.owner, "name": repo.name, "number": number, "after": after }),
         )?;
@@ -236,7 +236,7 @@ pub fn remarks(repo: &Repo, number: u64) -> Result<Vec<Remark>, String> {
         ("reviews", format!("/repos/{slug}/pulls/{number}/reviews")),
     ] {
         found.extend(
-            api::every(&repo.account, &path)?
+            api::every(&repo.via, &path)?
                 .iter()
                 .filter(|r| kind != "reviews" || r["body"].as_str().is_some_and(|b| !b.is_empty()))
                 .map(|r| remark_of(r, kind)),
@@ -255,7 +255,7 @@ pub fn remarks(repo: &Repo, number: u64) -> Result<Vec<Remark>, String> {
 }
 
 pub fn me(repo: &Repo) -> Result<Person, String> {
-    let user = api::rest(&repo.account, "/user")?;
+    let user = api::rest(&repo.via, "/user")?;
     Ok(Person {
         name: user["login"].as_str().unwrap_or_default().into(),
         avatar: user["avatar_url"].as_str().unwrap_or_default().into(),
@@ -296,7 +296,7 @@ pub fn run_of(value: &Value) -> Run {
 
 pub fn runs(repo: &Repo) -> Result<Vec<Run>, String> {
     let list = api::rest(
-        &repo.account,
+        &repo.via,
         &format!("/repos/{}/actions/runs?per_page=20", repo.slug()),
     )?;
     Ok(list["workflow_runs"]

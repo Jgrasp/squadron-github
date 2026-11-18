@@ -9,7 +9,11 @@ In Settings › Extensions › GitHub, add one account per owner of your reposit
 - Repository permissions: Pull requests and Contents in read and write, Workflows in read and write, Actions and Commit statuses in read.
 - Organization permissions: Members in read, to show the teams asked to review.
 
-A [classic token](https://github.com/settings/tokens/new?scopes=repo,read:org,workflow&description=Squadron) with the `repo`, `read:org` and `workflow` scopes works too, where the organization allows it. **Test the connection** checks a token before you save it. For each repository, the extension uses the account that can reach it.
+A [classic token](https://github.com/settings/tokens/new?scopes=repo,read:org,workflow&description=Squadron) with the `repo`, `read:org` and `workflow` scopes works too, where the organization allows it. **Test the connection** checks a token before you save it.
+
+Without an account, or when none reaches a repository, the extension goes through the [GitHub CLI](https://cli.github.com) once you ran `gh auth login`. Organizations that refuse classic tokens often accept it. **Use the GitHub CLI**, in the extension's options, turns this off.
+
+For each repository, the extension remembers the account, or the CLI, that reached it.
 
 Every project whose `origin` is on `github.com` then gets, in Squadron:
 
@@ -20,7 +24,8 @@ Every project whose `origin` is on `github.com` then gets, in Squadron:
 
 ## What it asks Squadron for
 
-- HTTPS requests to `api.github.com`, GitHub's API, and nothing else.
+- HTTPS requests to `api.github.com`, GitHub's API.
+- Running `gh`, the GitHub CLI: the extension only runs `gh api`, to reach GitHub with the CLI's sign in when no account can.
 - GitHub accounts: each token stays in the system keyring. Squadron adds it to the requests to GitHub, and the extension never reads it.
   - Pull requests and Contents read and write the pull requests, their comments and reviews, and merge them.
   - Workflows lets a merge go through when the pull request changes a workflow file.

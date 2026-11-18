@@ -14,7 +14,7 @@ pub fn reply(repo: &Repo, args: &ReplyArgs) -> Result<(), String> {
     } else {
         format!("/repos/{}/issues/{}/comments", repo.slug(), args.number)
     };
-    api::send(&repo.account, "POST", &path, &json!({ "body": args.body })).map(|_| ())
+    api::send(&repo.via, "POST", &path, &json!({ "body": args.body })).map(|_| ())
 }
 
 pub fn resolve(repo: &Repo, args: &ResolveArgs) -> Result<(), String> {
@@ -35,7 +35,7 @@ pub fn resolve(repo: &Repo, args: &ResolveArgs) -> Result<(), String> {
     } else {
         "mutation($id: ID!) { unresolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }"
     };
-    api::graphql(&repo.account, mutation, json!({ "id": thread.id })).map(|_| ())
+    api::graphql(&repo.via, mutation, json!({ "id": thread.id })).map(|_| ())
 }
 
 pub fn review(args: &PostArgs) -> Option<Value> {
@@ -75,7 +75,7 @@ pub fn post(repo: &Repo, args: &PostArgs) -> Result<Posted, String> {
         });
     };
     let path = format!("/repos/{}/pulls/{}/reviews", repo.slug(), args.number);
-    match api::send(&repo.account, "POST", &path, &review) {
+    match api::send(&repo.via, "POST", &path, &review) {
         Ok(_) => Ok(Posted {
             done: args.drafts.len(),
             said: true,
@@ -100,7 +100,7 @@ pub fn merge_method(default: &str) -> &'static str {
 
 pub fn merge(repo: &Repo, number: u64) -> Result<(), String> {
     let data = api::graphql(
-        &repo.account,
+        &repo.via,
         "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { viewerDefaultMergeMethod } }",
         json!({ "owner": repo.owner, "name": repo.name }),
     )?;
@@ -110,13 +110,7 @@ pub fn merge(repo: &Repo, number: u64) -> Result<(), String> {
             .unwrap_or_default(),
     );
     let path = format!("/repos/{}/pulls/{number}/merge", repo.slug());
-    api::send(
-        &repo.account,
-        "PUT",
-        &path,
-        &json!({ "merge_method": method }),
-    )
-    .map(|_| ())
+    api::send(&repo.via, "PUT", &path, &json!({ "merge_method": method })).map(|_| ())
 }
 
 pub fn changes(args: &UpdateArgs) -> Value {
@@ -132,7 +126,7 @@ pub fn changes(args: &UpdateArgs) -> Value {
 
 pub fn update(repo: &Repo, args: &UpdateArgs) -> Result<(), String> {
     let path = format!("/repos/{}/pulls/{}", repo.slug(), args.number);
-    api::send(&repo.account, "PATCH", &path, &changes(args)).map(|_| ())
+    api::send(&repo.via, "PATCH", &path, &changes(args)).map(|_| ())
 }
 
 #[cfg(test)]

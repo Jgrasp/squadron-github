@@ -26,16 +26,16 @@ where
     let key = format!("owner:{}", owner.to_lowercase());
     let known = host::state_get(&key);
     let mut last = String::new();
-    for account in api::ordered(api::accounts()?, known.clone()) {
+    for via in api::ordered(api::ways()?, known.clone()) {
         let repo = Repo {
-            account: account.clone(),
+            via: via.clone(),
             owner: owner.clone(),
             name: name.clone(),
         };
         match work(&repo, &asked.args) {
             Ok(found) => {
-                if known.as_deref() != Some(account.as_str()) {
-                    host::state_set(&key, Some(&account));
+                if known.as_deref() != Some(via.key()) {
+                    host::state_set(&key, Some(via.key()));
                 }
                 return forge::answer(&found);
             }
