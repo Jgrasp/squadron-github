@@ -1,5 +1,9 @@
 # Journal des modifications
 
+## 0.2.0 · 2026-11-19
+
+- Les runs GitHub Actions indiquent la pull request qu’ils vérifient : Squadron affiche son numéro et son titre sur le run et le range dans « Checks de PR »
+
 ## 0.1.1 · 2026-11-19
 
 - Les runs GitHub Actions s’affichent de nouveau pour les projets qui passent par la GitHub CLI

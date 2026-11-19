@@ -291,10 +291,16 @@ pub fn run_of(value: &Value) -> Run {
         finished: (value["status"] == "completed").then(|| text(&value["updated_at"])),
         author: text(&value["actor"]["login"]),
         author_avatar: text(&value["actor"]["avatar_url"]),
+        pull: value["pull_requests"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|p| p["base"]["repo"]["id"] == value["repository"]["id"])
+            .and_then(|p| p["number"].as_u64()),
     }
 }
 
-const RUN_FIELDS: &str = "{workflow_runs: [.workflow_runs[] | {id, run_number, name, display_title, event, head_branch, status, conclusion, html_url, run_started_at, created_at, updated_at, actor: {login: .actor.login, avatar_url: .actor.avatar_url}}]}";
+const RUN_FIELDS: &str = "{workflow_runs: [.workflow_runs[] | {id, run_number, name, display_title, event, head_branch, status, conclusion, html_url, run_started_at, created_at, updated_at, actor: {login: .actor.login, avatar_url: .actor.avatar_url}, repository: {id: .repository.id}, pull_requests: [.pull_requests[] | {number, base: {repo: {id: .base.repo.id}}}]}]}";
 
 pub fn runs(repo: &Repo) -> Result<Vec<Run>, String> {
     let list = api::rest_jq(
@@ -383,7 +389,20 @@ mod tests {
             ("queued", "a", None)
         );
         let run = run_of(&json!({"status": "in_progress"}));
-        assert_eq!(run.status, "running");
+        assert_eq!((run.status.as_str(), run.pull), ("running", None));
+        let pull = |n: u64, repo: u64| json!({"number": n, "base": {"repo": {"id": repo}}});
+        let run = run_of(
+            &json!({"event": "pull_request", "head_branch": "feat/x", "repository": {"id": 9}, "pull_requests": [pull(31, 9)]}),
+        );
+        assert_eq!((run.event.as_str(), run.pull), ("pull_request", Some(31)));
+        let run = run_of(
+            &json!({"event": "push", "head_branch": "main", "repository": {"id": 9}, "pull_requests": []}),
+        );
+        assert_eq!((run.event.as_str(), run.pull), ("push", None));
+        let run = run_of(
+            &json!({"event": "pull_request", "repository": {"id": 9}, "pull_requests": [pull(4, 2), pull(32, 9)]}),
+        );
+        assert_eq!(run.pull, Some(32));
         let run =
             run_of(&json!({"status": "completed", "conclusion": "skipped", "updated_at": "z"}));
         assert_eq!(
