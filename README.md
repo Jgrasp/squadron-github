@@ -19,7 +19,7 @@ Every project whose `origin` is on `github.com` then gets, in Squadron:
 
 - the pull request of each agent's branch, and chips for the pull request links in conversations;
 - the pull requests to review, yours and the others, with their checks, reviewers and conflicts;
-- reviews with line comments, a summary and a verdict, replies to remarks, merges with the repository's default method, and title and description changes, from you or from an agent;
+- reviews with line comments, a summary and a verdict, replies to remarks, merges with your default method, or one the repository and its branch rules allow, and title and description changes, from you or from an agent;
 - the GitHub Actions runs, with a notification when one ends.
 
 ## What it asks Squadron for
