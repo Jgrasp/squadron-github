@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 · 2026-11-19
+
+- GitHub Actions runs name the pull request they check, so Squadron shows its number and title on the run and files it under PR checks
+
 ## 0.1.1 · 2026-11-19
 
 - GitHub Actions runs show again for projects that go through the GitHub CLI
