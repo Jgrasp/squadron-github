@@ -1,8 +1,9 @@
 # Journal des modifications
 
-## 0.1.1 · 2026-11-18
+## 0.1.1 · 2026-11-19
 
 - Les runs GitHub Actions s’affichent de nouveau pour les projets qui passent par la GitHub CLI
+- La fusion d’une pull request prend une méthode autorisée par le dépôt et les règles de sa branche de base, quand votre méthode par défaut ne l’est pas
 
 ## 0.1.0 · 2026-11-18
 

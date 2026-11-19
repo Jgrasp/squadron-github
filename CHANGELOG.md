@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.1.1 · 2026-11-18
+## 0.1.1 · 2026-11-19
 
 - GitHub Actions runs show again for projects that go through the GitHub CLI
+- Merging a pull request uses a method the repository and its base branch rules allow, when your default one is not allowed
 
 ## 0.1.0 · 2026-11-18
 
