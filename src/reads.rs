@@ -294,10 +294,13 @@ pub fn run_of(value: &Value) -> Run {
     }
 }
 
+const RUN_FIELDS: &str = "{workflow_runs: [.workflow_runs[] | {id, run_number, name, display_title, event, head_branch, status, conclusion, html_url, run_started_at, created_at, updated_at, actor: {login: .actor.login, avatar_url: .actor.avatar_url}}]}";
+
 pub fn runs(repo: &Repo) -> Result<Vec<Run>, String> {
-    let list = api::rest(
+    let list = api::rest_jq(
         &repo.via,
         &format!("/repos/{}/actions/runs?per_page=20", repo.slug()),
+        RUN_FIELDS,
     )?;
     Ok(list["workflow_runs"]
         .as_array()

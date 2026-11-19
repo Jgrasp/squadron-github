@@ -90,25 +90,50 @@ pub fn post(repo: &Repo, args: &PostArgs) -> Result<Posted, String> {
     }
 }
 
-pub fn merge_method(default: &str) -> &'static str {
-    match default {
-        "SQUASH" => "squash",
-        "REBASE" => "rebase",
+pub fn merge_method(repository: &Value, rules: &[Value]) -> &'static str {
+    let default = match repository["viewerDefaultMergeMethod"].as_str() {
+        Some("SQUASH") => "squash",
+        Some("REBASE") => "rebase",
         _ => "merge",
-    }
+    };
+    let allowed = |method: &str| {
+        let flag = match method {
+            "squash" => "squashMergeAllowed",
+            "rebase" => "rebaseMergeAllowed",
+            _ => "mergeCommitAllowed",
+        };
+        repository[flag].as_bool().unwrap_or(true)
+            && rules
+                .iter()
+                .filter(|rule| rule["type"] == "pull_request")
+                .all(|rule| {
+                    rule["parameters"]["allowed_merge_methods"]
+                        .as_array()
+                        .is_none_or(|methods| methods.iter().any(|m| m == method))
+                })
+    };
+    [default, "merge", "squash", "rebase"]
+        .into_iter()
+        .find(|method| allowed(method))
+        .unwrap_or(default)
 }
 
 pub fn merge(repo: &Repo, number: u64) -> Result<(), String> {
     let data = api::graphql(
         &repo.via,
-        "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { viewerDefaultMergeMethod } }",
-        json!({ "owner": repo.owner, "name": repo.name }),
+        "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { viewerDefaultMergeMethod mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed pullRequest(number: $number) { baseRefName } } }",
+        json!({ "owner": repo.owner, "name": repo.name, "number": number }),
     )?;
-    let method = merge_method(
-        data["repository"]["viewerDefaultMergeMethod"]
-            .as_str()
-            .unwrap_or_default(),
-    );
+    let repository = &data["repository"];
+    let base = repository["pullRequest"]["baseRefName"]
+        .as_str()
+        .unwrap_or_default();
+    let rules = api::every(
+        &repo.via,
+        &format!("/repos/{}/rules/branches/{base}", repo.slug()),
+    )
+    .unwrap_or_default();
+    let method = merge_method(repository, &rules);
     let path = format!("/repos/{}/pulls/{number}/merge", repo.slug());
     api::send(&repo.via, "PUT", &path, &json!({ "merge_method": method })).map(|_| ())
 }
@@ -182,11 +207,40 @@ mod tests {
     }
 
     #[test]
-    fn merges_with_the_repository_default_method() {
-        assert_eq!(merge_method("SQUASH"), "squash");
-        assert_eq!(merge_method("REBASE"), "rebase");
-        assert_eq!(merge_method("MERGE"), "merge");
-        assert_eq!(merge_method(""), "merge");
+    fn merges_with_the_default_method_unless_the_repository_or_a_rule_forbids_it() {
+        let all = json!({ "mergeCommitAllowed": true, "squashMergeAllowed": true, "rebaseMergeAllowed": true });
+        let with = |default: &str| {
+            let mut repository = all.clone();
+            repository["viewerDefaultMergeMethod"] = json!(default);
+            repository
+        };
+        assert_eq!(merge_method(&with("SQUASH"), &[]), "squash");
+        assert_eq!(merge_method(&with("REBASE"), &[]), "rebase");
+        assert_eq!(merge_method(&with("MERGE"), &[]), "merge");
+        assert_eq!(merge_method(&json!({}), &[]), "merge");
+
+        let mut no_rebase = with("REBASE");
+        no_rebase["rebaseMergeAllowed"] = json!(false);
+        assert_eq!(merge_method(&no_rebase, &[]), "merge");
+        no_rebase["mergeCommitAllowed"] = json!(false);
+        assert_eq!(merge_method(&no_rebase, &[]), "squash");
+
+        let only_merge =
+            json!({ "type": "pull_request", "parameters": { "allowed_merge_methods": ["merge"] } });
+        let other = json!({ "type": "deletion" });
+        assert_eq!(
+            merge_method(&with("REBASE"), &[other, only_merge.clone()]),
+            "merge"
+        );
+        let only_squash = json!({ "type": "pull_request", "parameters": { "allowed_merge_methods": ["squash", "rebase"] } });
+        assert_eq!(
+            merge_method(&with("MERGE"), std::slice::from_ref(&only_squash)),
+            "squash"
+        );
+        assert_eq!(
+            merge_method(&with("REBASE"), &[only_merge, only_squash]),
+            "rebase"
+        );
     }
 
     #[test]
