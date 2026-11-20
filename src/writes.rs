@@ -2,7 +2,7 @@ use crate::reads::Repo;
 use crate::{api, pulls};
 use serde_json::{Map, Value, json};
 use squadron_extension_api::forge::{
-    Draft, MergeArgs, PostArgs, Posted, ReplyArgs, ResolveArgs, UpdateArgs,
+    self, CreateArgs, Draft, MergeArgs, PostArgs, Posted, Pull, ReplyArgs, ResolveArgs, UpdateArgs,
 };
 
 pub fn reply(repo: &Repo, args: &ReplyArgs) -> Result<(), String> {
@@ -142,6 +142,76 @@ pub fn update(repo: &Repo, args: &UpdateArgs) -> Result<(), String> {
     api::send(&repo.via, "PATCH", &path, &changes(args)).map(|_| ())
 }
 
+fn known_refusal(error: &str) -> bool {
+    error.contains("A pull request already exists") || error.contains("No commits between")
+}
+
+pub fn draft_refused(error: &str) -> bool {
+    error.contains("422") && error.to_lowercase().contains("draft") && !known_refusal(error)
+}
+
+pub fn creation_failure(error: String, args: &CreateArgs) -> String {
+    let (branch, base) = (&args.branch, &args.base);
+    if error.contains("A pull request already exists") {
+        return forge::failure(
+            None,
+            json!({
+                "en": format!("A pull request is already open for {branch}"),
+                "fr": format!("Une pull request est déjà ouverte pour {branch}"),
+            }),
+            None,
+        );
+    }
+    if error.contains("No commits between") {
+        return forge::failure(
+            None,
+            json!({
+                "en": format!("{branch} has no commit that {base} lacks"),
+                "fr": format!("{branch} n’a aucun commit absent de {base}"),
+            }),
+            Some(json!({
+                "en": "Push commits on the branch, or pick another base.",
+                "fr": "Poussez des commits sur la branche, ou choisissez une autre base.",
+            })),
+        );
+    }
+    error
+}
+
+fn created(found: &Value) -> Pull {
+    Pull {
+        number: found["number"].as_u64().unwrap_or_default(),
+        title: found["title"].as_str().unwrap_or_default().into(),
+        description: found["body"].as_str().unwrap_or_default().into(),
+        url: found["html_url"].as_str().unwrap_or_default().into(),
+        state: "open".into(),
+        draft: found["draft"] == true,
+        branch: found["head"]["ref"].as_str().unwrap_or_default().into(),
+        base: found["base"]["ref"].as_str().unwrap_or_default().into(),
+        ..Pull::default()
+    }
+}
+
+pub fn create(repo: &Repo, args: &CreateArgs) -> Result<Pull, String> {
+    let path = format!("/repos/{}/pulls", repo.slug());
+    let mut body = json!({ "head": args.branch, "base": args.base, "title": args.title, "body": args.description, "draft": args.draft });
+    let found = match api::send(&repo.via, "POST", &path, &body) {
+        Err(error) if args.draft && draft_refused(&error) => {
+            body["draft"] = json!(false);
+            api::send(&repo.via, "POST", &path, &body)
+        }
+        sent => sent,
+    }
+    .map_err(|error| creation_failure(error, args))?;
+    let Some(number) = found["number"].as_u64() else {
+        return Err(format!(
+            "GitHub opened no pull request for {}.",
+            args.branch
+        ));
+    };
+    Ok(crate::reads::numbered(repo, number).map_or_else(|_| created(&found), |n| n.pull))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,6 +287,59 @@ mod tests {
         assert_eq!(
             merge_method(picked.args.method.as_deref(), &json!("MERGE"), &all),
             "squash"
+        );
+    }
+
+    #[test]
+    fn tells_why_github_opened_no_pull_request() {
+        let args = CreateArgs {
+            branch: "feat/draft-mode".into(),
+            base: "main".into(),
+            draft: true,
+            ..CreateArgs::default()
+        };
+        let exists = "GitHub answered 422: Validation Failed: A pull request already exists for Jgrasp:feat/draft-mode.";
+        let empty =
+            "GitHub answered 422: Validation Failed: No commits between main and feat/draft-mode";
+        let draft = "GitHub answered 422: Validation Failed: Draft pull requests are not supported in this repository.";
+        assert!(!draft_refused(exists) && !draft_refused(empty) && draft_refused(draft));
+        assert!(!draft_refused(
+            "GitHub answered 403: Resource not accessible: draft"
+        ));
+        let failure: Value = serde_json::from_str(&creation_failure(exists.into(), &args)).unwrap();
+        assert_eq!(
+            failure["title"]["en"],
+            "A pull request is already open for feat/draft-mode"
+        );
+        assert_eq!(
+            failure["title"]["fr"],
+            "Une pull request est déjà ouverte pour feat/draft-mode"
+        );
+        let failure: Value = serde_json::from_str(&creation_failure(empty.into(), &args)).unwrap();
+        assert_eq!(
+            failure["title"]["en"],
+            "feat/draft-mode has no commit that main lacks"
+        );
+        assert!(failure["detail"]["fr"].is_string());
+        let other = "GitHub answered 404: Not Found";
+        assert_eq!(creation_failure(other.into(), &args), other);
+    }
+
+    #[test]
+    fn answers_the_created_pull_from_the_rest_answer() {
+        let found = json!({ "number": 9, "title": "Export", "body": null, "html_url": "https://github.com/a/b/pull/9", "draft": true, "head": { "ref": "feat/x" }, "base": { "ref": "main" } });
+        let pull = created(&found);
+        assert_eq!(
+            (pull.number, pull.state.as_str(), pull.draft),
+            (9, "open", true)
+        );
+        assert_eq!(
+            (
+                pull.branch.as_str(),
+                pull.base.as_str(),
+                pull.description.as_str()
+            ),
+            ("feat/x", "main", "")
         );
     }
 
