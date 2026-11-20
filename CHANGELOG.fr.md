@@ -1,5 +1,9 @@
 # Journal des modifications
 
+## 0.4.0 · 2026-11-20
+
+- Ouvrir depuis Squadron une pull request pour la branche poussée d’un agent, en brouillon quand le dépôt le permet, avec un message clair quand une pull request est déjà ouverte ou que la branche n’a aucun nouveau commit
+
 ## 0.3.0 · 2026-11-20
 
 - La fusion d’une pull request utilise la méthode choisie dans Squadron, parmi celles que le dépôt et les règles de sa branche de base autorisent

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 · 2026-11-20
+
+- Open a pull request from Squadron for an agent's pushed branch, as a draft where the repository allows drafts, with a clear message when one is already open or the branch has no new commit
+
 ## 0.3.0 · 2026-11-20
 
 - Merging a pull request uses the method you pick in Squadron, among those the repository and its base branch rules allow
