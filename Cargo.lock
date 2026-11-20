@@ -28,7 +28,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "github"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -182,8 +182,8 @@ dependencies = [
 
 [[package]]
 name = "squadron_extension_api"
-version = "1.11.0"
-source = "git+https://github.com/Jgrasp/squadron-extensions#9f76fb5417c6f324b5094846478e7801e50f4084"
+version = "1.13.0"
+source = "git+https://github.com/Jgrasp/squadron-extensions#ea441b5c1bbc027e0661d9a4dbc87a9cd811b857"
 dependencies = [
  "serde",
  "serde_json",

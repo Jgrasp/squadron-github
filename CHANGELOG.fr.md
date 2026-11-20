@@ -1,5 +1,10 @@
 # Journal des modifications
 
+## 0.3.0 · 2026-11-20
+
+- La fusion d’une pull request utilise la méthode choisie dans Squadron, parmi celles que le dépôt et les règles de sa branche de base autorisent
+- Squadron indique avant une fusion si GitHub supprimera la branche source, d’après le réglage « Automatically delete head branches » du dépôt, et quand une branche protégée est conservée
+
 ## 0.2.0 · 2026-11-19
 
 - Les runs GitHub Actions indiquent la pull request qu’ils vérifient : Squadron affiche son numéro et son titre sur le run et le range dans « Checks de PR »

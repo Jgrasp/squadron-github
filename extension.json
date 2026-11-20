@@ -1,8 +1,8 @@
 {
   "id": "github",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "api": 1,
-  "squadron": ">=0.53.0",
+  "squadron": ">=0.56.0",
   "name": { "en": "GitHub", "fr": "GitHub" },
   "description": {
     "en": "Pull requests and GitHub Actions runs of your GitHub projects in Squadron: review, comment, merge",
