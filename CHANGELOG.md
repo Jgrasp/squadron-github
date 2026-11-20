@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 · 2026-11-20
+
+- Merging a pull request uses the method you pick in Squadron, among those the repository and its base branch rules allow
+- Squadron tells before a merge whether GitHub will delete the head branch, from the repository's "Automatically delete head branches" setting, and when a protected branch is kept
+
 ## 0.2.0 · 2026-11-19
 
 - GitHub Actions runs name the pull request they check, so Squadron shows its number and title on the run and files it under PR checks

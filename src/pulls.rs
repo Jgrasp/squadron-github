@@ -10,6 +10,10 @@ pub const FIELDS: &str = "fragment pr on PullRequest {
   baseRefName headRefName headRefOid
   author { login }
   updatedAt mergeable mergeStateStatus
+  repository { mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed }
+  headRepository { deleteBranchOnMerge viewerPermission }
+  baseRef { rules(first: 50) { nodes { type parameters { ... on PullRequestParameters { allowedMergeMethods } } } } }
+  headRef { refUpdateRule { allowsDeletions } rules(first: 50) { nodes { type } } }
 }";
 
 fn text(value: &Value) -> String {
@@ -112,6 +116,48 @@ pub fn requested(found: &Value, me: &str) -> bool {
         .any(|r| r["requestedReviewer"]["login"] == me)
 }
 
+pub fn merge_methods(found: &Value) -> Vec<String> {
+    let rules = nodes(&found["baseRef"]["rules"]);
+    [
+        ("merge", "mergeCommitAllowed", "MERGE"),
+        ("squash", "squashMergeAllowed", "SQUASH"),
+        ("rebase", "rebaseMergeAllowed", "REBASE"),
+    ]
+    .into_iter()
+    .filter(|(_, flag, name)| {
+        found["repository"][*flag] == true
+            && rules
+                .iter()
+                .filter(|rule| rule["type"] == "PULL_REQUEST")
+                .all(|rule| {
+                    rule["parameters"]["allowedMergeMethods"]
+                        .as_array()
+                        .is_none_or(|methods| methods.iter().any(|m| m == name))
+                })
+    })
+    .map(|(method, ..)| method.to_string())
+    .collect()
+}
+
+fn branch_protected(found: &Value) -> bool {
+    let head = &found["headRef"];
+    !head["refUpdateRule"].is_null()
+        || nodes(&head["rules"])
+            .iter()
+            .any(|r| r["type"] == "DELETION")
+}
+
+fn delete_branch(found: &Value) -> Option<bool> {
+    let head = &found["headRepository"];
+    let writer = matches!(
+        head["viewerPermission"].as_str(),
+        Some("ADMIN" | "MAINTAIN" | "WRITE")
+    );
+    head["deleteBranchOnMerge"]
+        .as_bool()
+        .map(|on| on && writer && !branch_protected(found))
+}
+
 pub fn pull_of(found: &Value, me: &str) -> Pull {
     let reviews = nodes(&found["latestReviews"]);
     let mine = reviews
@@ -149,6 +195,10 @@ pub fn pull_of(found: &Value, me: &str) -> Pull {
                 found["mergeStateStatus"].as_str(),
                 Some("CLEAN" | "HAS_HOOKS" | "UNSTABLE")
             ),
+        merge_methods: merge_methods(found),
+        delete_branch: delete_branch(found),
+        delete_branch_settable: false,
+        branch_protected: branch_protected(found),
     }
 }
 
@@ -349,6 +399,53 @@ mod tests {
         assert!(!pull_of(&blocked, "").mergeable);
         let draft = json!({ "state": "OPEN", "isDraft": true, "mergeStateStatus": "CLEAN" });
         assert!(!pull_of(&draft, "").mergeable);
+    }
+
+    #[test]
+    fn tells_the_merge_methods_and_whether_the_branch_goes() {
+        let found = json!({
+            "repository": { "mergeCommitAllowed": true, "squashMergeAllowed": true, "rebaseMergeAllowed": false },
+            "headRepository": { "deleteBranchOnMerge": true, "viewerPermission": "WRITE" },
+            "baseRef": { "rules": { "nodes": [
+                { "type": "DELETION", "parameters": null },
+                { "type": "PULL_REQUEST", "parameters": { "allowedMergeMethods": ["SQUASH", "REBASE"] } }
+            ] } },
+            "headRef": { "refUpdateRule": null, "rules": { "nodes": [] } }
+        });
+        let pull = pull_of(&found, "");
+        assert_eq!(pull.merge_methods, ["squash"]);
+        assert_eq!(
+            (
+                pull.delete_branch,
+                pull.delete_branch_settable,
+                pull.branch_protected
+            ),
+            (Some(true), false, false)
+        );
+
+        let mut kept = found.clone();
+        kept["headRef"]["rules"]["nodes"] = json!([{ "type": "DELETION" }]);
+        assert_eq!(
+            (
+                pull_of(&kept, "").delete_branch,
+                pull_of(&kept, "").branch_protected
+            ),
+            (Some(false), true)
+        );
+        kept["headRef"] =
+            json!({ "refUpdateRule": { "allowsDeletions": false }, "rules": { "nodes": [] } });
+        assert!(pull_of(&kept, "").branch_protected);
+
+        let mut fork = found.clone();
+        fork["headRepository"]["viewerPermission"] = json!("READ");
+        assert_eq!(pull_of(&fork, "").delete_branch, Some(false));
+
+        let unknown = pull_of(&json!({ "number": 3 }), "");
+        assert!(
+            unknown.merge_methods.is_empty()
+                && unknown.delete_branch.is_none()
+                && !unknown.branch_protected
+        );
     }
 
     fn open(number: u64, author: &str, asked: &[&str]) -> Value {
