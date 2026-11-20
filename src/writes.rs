@@ -192,9 +192,13 @@ fn created(found: &Value) -> Pull {
     }
 }
 
+pub fn opening(args: &CreateArgs) -> Value {
+    json!({ "head": args.branch, "base": args.base, "title": args.title, "body": args.description, "draft": args.draft })
+}
+
 pub fn create(repo: &Repo, args: &CreateArgs) -> Result<Pull, String> {
     let path = format!("/repos/{}/pulls", repo.slug());
-    let mut body = json!({ "head": args.branch, "base": args.base, "title": args.title, "body": args.description, "draft": args.draft });
+    let mut body = opening(args);
     let found = match api::send(&repo.via, "POST", &path, &body) {
         Err(error) if args.draft && draft_refused(&error) => {
             body["draft"] = json!(false);
@@ -323,6 +327,18 @@ mod tests {
         assert!(failure["detail"]["fr"].is_string());
         let other = "GitHub answered 404: Not Found";
         assert_eq!(creation_failure(other.into(), &args), other);
+    }
+
+    #[test]
+    fn posts_the_branch_base_title_description_and_draft() {
+        let asked: squadron_extension_api::forge::Input<CreateArgs> = squadron_extension_api::forge::input(
+            r#"{"args":{"branch":"feat/x","base":"main","title":"Export","description":"Adds **export**","draft":true}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            opening(&asked.args),
+            json!({ "head": "feat/x", "base": "main", "title": "Export", "body": "Adds **export**", "draft": true })
+        );
     }
 
     #[test]
