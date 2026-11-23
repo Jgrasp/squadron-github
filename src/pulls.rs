@@ -216,13 +216,19 @@ pub fn lists(found: Found) -> Lists {
         list.iter()
             .any(|p| Some(p.number) == node["number"].as_u64())
     };
-    let mut review: Vec<Pull> = found.requested.iter().map(|p| pull_of(p, me)).collect();
+    let asked = |node: &Value| {
+        let mut pull = pull_of(node, me);
+        if requested(node, me) {
+            pull.reviewed = None;
+        }
+        pull
+    };
+    let mut review: Vec<Pull> = found.requested.iter().map(asked).collect();
     for node in found.open.iter().filter(|p| requested(p, me)) {
         if !has(&review, node) {
-            review.push(pull_of(node, me));
+            review.push(asked(node));
         }
     }
-    review.iter_mut().for_each(|p| p.reviewed = None);
     for node in found.reviewed {
         if !has(&review, node) {
             review.push(pull_of(node, me));
@@ -489,6 +495,28 @@ mod tests {
                 .collect::<Vec<_>>(),
             [None, None, Some("commented")]
         );
+    }
+
+    #[test]
+    fn keeps_my_verdict_on_a_pull_request_the_search_still_lists_as_requested() {
+        let mut approved = open(7, "ann", &[]);
+        approved["latestReviews"]["nodes"][0]["state"] = json!("APPROVED");
+        let lists = lists(Found {
+            me: "me",
+            requested: &[approved.clone()],
+            reviewed: &[],
+            authored: &[],
+            open: &[approved],
+        });
+        assert_eq!(
+            lists
+                .review
+                .iter()
+                .map(|p| (p.number, p.reviewed.as_deref()))
+                .collect::<Vec<_>>(),
+            [(7, Some("approved"))]
+        );
+        assert!(lists.others.is_empty());
     }
 
     #[test]

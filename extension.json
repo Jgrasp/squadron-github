@@ -1,6 +1,6 @@
 {
   "id": "github",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "api": 1,
   "squadron": ">=0.56.0",
   "name": { "en": "GitHub", "fr": "GitHub" },
