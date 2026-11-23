@@ -1,5 +1,9 @@
 # Journal des modifications
 
+## 0.4.1 · 2026-11-23
+
+- Une pull request que vous avez déjà relue garde votre verdict dans la liste à relire, au lieu d’apparaître comme en attente de vous tant que la recherche de GitHub vous compte encore parmi les relecteurs demandés
+
 ## 0.4.0 · 2026-11-20
 
 - Ouvrir depuis Squadron une pull request pour la branche poussée d’un agent, en brouillon quand le dépôt le permet, avec un message clair quand une pull request est déjà ouverte ou que la branche n’a aucun nouveau commit

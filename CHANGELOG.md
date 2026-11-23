@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 · 2026-11-23
+
+- A pull request you already reviewed keeps your verdict in the list to review, instead of showing as waiting for you while GitHub's search still lists you as requested
+
 ## 0.4.0 · 2026-11-20
 
 - Open a pull request from Squadron for an agent's pushed branch, as a draft where the repository allows drafts, with a clear message when one is already open or the branch has no new commit
