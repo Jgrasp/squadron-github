@@ -1,6 +1,6 @@
 # GitHub
 
-A [Squadron](https://github.com/Jgrasp/squadron) extension that brings the pull requests and GitHub Actions runs of your GitHub projects into Squadron.
+A [Squadron](https://github.com/akki-team/squadron) extension that brings the pull requests and GitHub Actions runs of your GitHub projects into Squadron.
 
 ## Use
 
